@@ -1,0 +1,16 @@
+{
+   "debug": false,
+   "engine": "sqlite",
+   "database": "local",
+   "user": "root",
+   "pass": null,
+   "database_dir": "./hitran",
+   "echo": false,
+   "api_version": "v2",
+   "display_fetch_url": false,
+   "proxy": null,
+   "host": "https://hitran.org",
+   "tmpdir": "./hitran/~tmp",
+   "api_key": "87b6c05d-5dd2-4e54-ac21-c0bbe4362f3a",
+   "info": "server_info.json"
+}
