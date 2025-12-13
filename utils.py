@@ -77,7 +77,7 @@ def compute_absorption_voigt(
     wngrid = arange_(nu_min - margin, nu_max + margin, step)
 
     # --- Cache transitions ---
-    storage2cache(table_name, query=main_iso.transitions)
+    storage2cache(table_name)
 
     # --- Absorption coefficient ---
     wavenumber, alpha = absorptionCoefficient_Voigt(
@@ -89,3 +89,4 @@ def compute_absorption_voigt(
     )
 
     return wavenumber, alpha
+
