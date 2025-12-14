@@ -41,13 +41,13 @@ def compute_absorption_voigt(
     if diluent is None:
         diluent = {'air': 1.0}
 
-    fetch_info()
     table_name = f'{molecule_name}_{int(numin)}_{int(numax)}'
 
     # --- Molecule & isotopologue ---
     try:
         mol = Molecule(molecule_name)
     except:
+        fetch_info()
         fetch_molecules()
         mol = Molecule(molecule_name)
 
@@ -89,4 +89,5 @@ def compute_absorption_voigt(
     )
 
     return wavenumber, alpha
+
 
