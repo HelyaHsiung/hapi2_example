@@ -1,5 +1,6 @@
 from hapi2.db.models import Molecule
-from hapi2.web import fetch_info, fetch_molecules, fetch_isotopologues, fetch_transitions, fetch_partition_functions
+from hapi2.web import fetch_info, fetch_molecules, fetch_isotopologues, fetch_transitions, \
+    fetch_partition_functions, fetch_cross_section_headers, fetch_cross_sections, fetch_cross_section_spectra
 from hapi2.db.sqlalchemy.legacy import storage2cache
 from hapi2.opacity.lbl.numba.fast_abscoef import arange_
 from hapi2.opacity.lbl.numba import absorptionCoefficient_Voigt
@@ -51,43 +52,64 @@ def compute_absorption_voigt(
         fetch_molecules()
         mol = Molecule(molecule_name)
 
-    if len(mol.isotopologues) == 0:
-        fetch_isotopologues([mol])
+    assert mol.id <= 61, "exceed HITRAN database"
 
-    main_iso = max(mol.isotopologues, key=lambda x: x.abundance)
+    if mol.id in [30, 35, 42, 55]:  # cross-section: Sulfur Hexafluoride, Chlorine Nitrate, PFC-14, Nitrogen Trifluoride
+        headers = fetch_cross_section_headers([mol])
+        best_header = None
+        min_diff = float('inf')
+        for h in headers:
+            print(h.numin, h.numax)
+            if h.numin <= numin and h.numax >= numax:
+                temp_diff = abs(h.temperature - T)
+                if temp_diff < min_diff:
+                    min_diff = temp_diff
+                    best_header = h
+        if best_header is None:
+            raise ValueError(f"Can not find {molecule_name} cross-section data in {numin}-{numax} cm-1")
+        print(f"Select {molecule_name} cross-section data: T={best_header.temperature}K, range={best_header.numin}-{best_header.numax} cm-1")
 
-    # Partition function is required for line intensity
-    fetch_partition_functions([main_iso])
+        wavenumber, alpha = best_header.get_data()
 
-    # --- Transitions ---
-    if main_iso.transitions.count() == 0:
-        print(f"Download {molecule_name} spectral line: [{numin}-{numax} cm-1] ...")
-        fetch_transitions([main_iso], numin, numax, table_name)
+        mask = (wavenumber >= numin) & (wavenumber <= numax)
+        wavenumber = wavenumber[mask]
+        alpha = alpha[mask]
 
-    print(f"Downloaded {table_name}: {main_iso.transitions.count()} n_points.\n")
+    else:  # line-by-line
+        if len(mol.isotopologues) == 0:
+            fetch_isotopologues([mol])
+        main_iso = max(mol.isotopologues, key=lambda x: x.abundance)
 
-    # --- Automatic wavenumber grid ---
-    nu0 = [tr.nu for tr in main_iso.transitions]
-    nu_min = min(nu0)
-    nu_max = max(nu0)
+        # Partition function is required for line intensity
+        fetch_partition_functions([main_iso])
 
-    gamma_max = max(tr.gamma_air for tr in main_iso.transitions)
-    margin = wing_factor * gamma_max
+        # --- Transitions ---
+        if main_iso.transitions.count() == 0:
+            print(f"Download {molecule_name} spectral line: [{numin}-{numax} cm-1] ...")
+            fetch_transitions([main_iso], numin, numax, table_name)
 
-    wngrid = arange_(nu_min - margin, nu_max + margin, step)
+        print(f"Downloaded {table_name}: {main_iso.transitions.count()} n_points.\n")
 
-    # --- Cache transitions ---
-    storage2cache(table_name)
+        # --- Automatic wavenumber grid ---
+        nu0 = [tr.nu for tr in main_iso.transitions]
+        nu_min = min(nu0)
+        nu_max = max(nu0)
 
-    # --- Absorption coefficient ---
-    wavenumber, alpha = absorptionCoefficient_Voigt(
-        SourceTables=[table_name],
-        Environment={'T': T, 'p': P},
-        HITRAN_units=HITRAN_units,
-        Diluent=diluent,
-        WavenumberGrid=wngrid
-    )
+        gamma_max = max(tr.gamma_air for tr in main_iso.transitions)
+        margin = wing_factor * gamma_max
+
+        wngrid = arange_(nu_min - margin, nu_max + margin, step)
+
+        # --- Cache transitions ---
+        storage2cache(table_name)
+
+        # --- Absorption coefficient ---
+        wavenumber, alpha = absorptionCoefficient_Voigt(
+            SourceTables=[table_name],
+            Environment={'T': T, 'p': P},
+            HITRAN_units=HITRAN_units,
+            Diluent=diluent,
+            WavenumberGrid=wngrid
+        )
 
     return wavenumber, alpha
-
-
