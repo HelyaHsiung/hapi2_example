@@ -1,5 +1,5 @@
 # Personal Note of HITRAN API v2
-Calculate Absorbaption Coefficienct in unit of cm2/molecule.
+Calculate Absorbaption Coefficienct.
 
 ### 1. Line-by-Line Data
 <img src='imgs/Absorbance of CH4.png'>
