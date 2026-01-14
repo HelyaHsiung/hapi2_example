@@ -3,27 +3,29 @@ from hapi2.web import fetch_info, fetch_molecules, fetch_isotopologues, fetch_tr
     fetch_partition_functions, fetch_cross_section_headers, fetch_cross_sections, fetch_cross_section_spectra
 from hapi2.db.sqlalchemy.legacy import storage2cache
 from hapi2.opacity.lbl.numba.fast_abscoef import arange_
-from hapi2.opacity.lbl.numba import absorptionCoefficient_Voigt
+from hapi2.opacity.lbl.numba import absorptionCoefficient_Generic, absorptionCoefficient_Voigt, absorptionCoefficient_Lorentz, absorptionCoefficient_Doppler
 
 
-def compute_absorption_voigt(
+def compute_absorption(
     molecule_name,
     numin,
     numax,
     T=296.0,
     P=1.0,
+    lbl_profile='Voigt',
     HITRAN_units=True,
     diluent=None,
     step=0.01,
     wing_factor=50
 ):
     """
-    Line-by-line absorption coefficient calculation using Voigt profile.
+    Line-by-line absorption coefficient calculation using Voigt, Lorentz, or Doppler profile.
+    Add support for cross-section data.
 
     Parameters
     ----------
     molecule_name : str
-        HITRAN molecule name, e.g. 'CH4'
+        HITRAN molecule name, e.g. 'CH4', 'SF6'
     numin, numax : float
         Requested spectral range (cm^-1)
     T : float
@@ -59,7 +61,6 @@ def compute_absorption_voigt(
         best_header = None
         min_diff = float('inf')
         for h in headers:
-            print(h.numin, h.numax)
             if h.numin <= numin and h.numax >= numax:
                 temp_diff = abs(h.temperature - T)
                 if temp_diff < min_diff:
@@ -69,6 +70,7 @@ def compute_absorption_voigt(
             raise ValueError(f"Can not find {molecule_name} cross-section data in {numin}-{numax} cm-1")
         print(f"Select {molecule_name} cross-section data: T={best_header.temperature}K, range={best_header.numin}-{best_header.numax} cm-1")
 
+        fetch_cross_section_spectra([best_header])
         wavenumber, alpha = best_header.get_data()
 
         mask = (wavenumber >= numin) & (wavenumber <= numax)
@@ -104,12 +106,38 @@ def compute_absorption_voigt(
         storage2cache(table_name)
 
         # --- Absorption coefficient ---
-        wavenumber, alpha = absorptionCoefficient_Voigt(
-            SourceTables=[table_name],
-            Environment={'T': T, 'p': P},
-            HITRAN_units=HITRAN_units,
-            Diluent=diluent,
-            WavenumberGrid=wngrid
-        )
-
+        if lbl_profile == 'Voigt':
+            wavenumber, alpha = absorptionCoefficient_Voigt(
+                SourceTables=[table_name],
+                Environment={'T': T, 'p': P},
+                HITRAN_units=HITRAN_units,
+                Diluent=diluent,
+                WavenumberGrid=wngrid
+            )
+        elif lbl_profile == 'Lorentz':
+            wavenumber, alpha = absorptionCoefficient_Lorentz(
+                SourceTables=[table_name],
+                Environment={'T': T, 'p': P},
+                HITRAN_units=HITRAN_units,
+                Diluent=diluent,
+                WavenumberGrid=wngrid
+            )
+        elif lbl_profile == 'Doppler':
+            wavenumber, alpha = absorptionCoefficient_Doppler(
+                SourceTables=[table_name],
+                Environment={'T': T, 'p': P},
+                HITRAN_units=HITRAN_units,
+                Diluent=diluent,
+                WavenumberGrid=wngrid
+            )
+        else:
+            wavenumber, alpha = absorptionCoefficient_Generic(
+                profile='None',
+                calcpars={'None': None},
+                SourceTables=[table_name],
+                Environment={'T': T, 'p': P},
+                HITRAN_units=HITRAN_units,
+                Diluent=diluent,
+                WavenumberGrid=wngrid
+            )
     return wavenumber, alpha
